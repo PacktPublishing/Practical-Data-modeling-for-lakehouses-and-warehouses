@@ -1,0 +1,278 @@
+CREATE OR REPLACE TABLE fact_transaction_clustered_flat AS
+SELECT
+    fct.*,
+    dc.customer_full_name,
+    dc.customer_segment,
+    dc.customer_risk_tier,
+    dc.customer_type,
+    dc.customer_status,
+    dc.country,
+    dc.preferred_channel,
+    dc.onboarding_date_id,
+    dc.is_current,
+    CASE (fct.ACCOUNT_ID % 4)
+        WHEN 0 THEN 'CURR' WHEN 1 THEN 'SAVG'
+        WHEN 2 THEN 'LOAN' ELSE        'CRDT'
+    END                                         AS ACCOUNT_TYPE,
+ 
+    CASE (fct.ACCOUNT_ID % 10)
+        WHEN 8 THEN 'SU' WHEN 9 THEN 'CL'
+        ELSE             'AC'
+    END                                         AS ACCOUNT_STATUS,
+ 
+    CASE (fct.ACCOUNT_ID % 3)
+        WHEN 0 THEN 'ZAR' WHEN 1 THEN 'USD'
+        ELSE             'EUR'
+    END                                         AS ACCOUNT_CURRENCY,
+ 
+    TO_NUMBER(TO_CHAR(
+        DATEADD('day', fct.ACCOUNT_ID % 5478, '2010-01-01'::DATE),
+    'YYYYMMDD'))                                AS ACCOUNT_OPEN_DATE_ID,
+ 
+    ROUND((fct.ACCOUNT_ID % 500) * 1000.00, 2)   AS ACCOUNT_CREDIT_LIMIT,
+ 
+    CASE (fct.ACCOUNT_ID % 4)
+        WHEN 0 THEN 'STND' WHEN 1 THEN 'GOLD'
+        WHEN 2 THEN 'PLAT' ELSE        'PRIV'
+    END                                         AS ACCOUNT_TIER,
+ 
+    CASE (fct.ACCOUNT_ID % 3)
+        WHEN 0 THEN 'LOW' WHEN 1 THEN 'MID'
+        ELSE             'HIG'
+    END                                         AS ACCOUNT_INTEREST_RATE_BAND,
+ 
+    CASE
+        WHEN (fct.ACCOUNT_ID % 10) = 0 THEN '0-1K'
+        WHEN (fct.ACCOUNT_ID % 10) <= 4 THEN '1K-10K'
+        WHEN (fct.ACCOUNT_ID % 10) <= 7 THEN '10K-100K'
+        ELSE                               '100K+'
+    END                                         AS ACCOUNT_BALANCE_BAND,
+ 
+    -- ── 6 DIM_CHANNEL columns (inline from CHANNEL_ID, 5 channels) ───────────
+    CASE (fct.CHANNEL_ID % 5)
+        WHEN 0 THEN 'Mobile Banking'
+        WHEN 1 THEN 'Internet Banking'
+        WHEN 2 THEN 'Branch Counter'
+        WHEN 3 THEN 'ATM Network'
+        ELSE        'Third Party API'
+    END                                         AS CHANNEL_NAME,
+ 
+    CASE (fct.CHANNEL_ID % 5)
+        WHEN 0 THEN 'DGTL' WHEN 1 THEN 'DGTL'
+        WHEN 2 THEN 'PHYS' WHEN 3 THEN 'PHYS'
+        ELSE             'EXTL'
+    END                                         AS CHANNEL_TYPE,
+ 
+    CASE (fct.CHANNEL_ID % 5)
+        WHEN 0 THEN 'MOBI' WHEN 1 THEN 'BRWZ'
+        WHEN 2 THEN 'TERM' WHEN 3 THEN 'TERM'
+        ELSE             'API'
+    END                                         AS CHANNEL_PLATFORM,
+ 
+    CASE WHEN (fct.CHANNEL_ID % 5) IN (0,1,4) THEN 1 ELSE 0
+    END                                         AS CHANNEL_IS_DIGITAL_FLAG,
+ 
+    CASE WHEN (fct.CHANNEL_ID % 5) = 4 THEN 'INTL' ELSE 'NATL'
+    END                                         AS CHANNEL_REGION,
+ 
+    CASE (fct.CHANNEL_ID % 5)
+        WHEN 0 THEN 'Customer-initiated payments and transfers via OmniFin Money App'
+        WHEN 1 THEN 'Customer-initiated transactions via OmniFin Online Banking portal'
+        WHEN 2 THEN 'Teller-assisted transaction processed at a physical OmniFin branch'
+        WHEN 3 THEN 'Self-service cash and payment transactions via OmniFin ATM terminal'
+        ELSE        'System-to-system payments submitted via the OmniFin Open API gateway'
+    END                                         AS CHANNEL_DESCRIPTION,
+ 
+    -- ── 7 DIM_PRODUCT columns (inline from PRODUCT_ID, 20 products) ──────────
+    CASE (fct.PRODUCT_ID % 20)
+        WHEN  0 THEN 'Pay-As-You-Use Current Account'
+        WHEN  1 THEN 'MiGoals Savings Account'
+        WHEN  2 THEN 'Money Market Account'
+        WHEN  3 THEN 'Gold Current Account'
+        WHEN  4 THEN 'Greenbacks Credit Card'
+        WHEN  5 THEN 'Personal Loan'
+        WHEN  6 THEN 'Home Loan'
+        WHEN  7 THEN 'Overdraft Facility'
+        WHEN  8 THEN 'Business Current Account'
+        WHEN  9 THEN 'Business Savings Account'
+        WHEN 10 THEN 'Business Term Loan'
+        WHEN 11 THEN 'Trade Finance Facility'
+        WHEN 12 THEN 'Fixed Deposit'
+        WHEN 13 THEN 'Unit Trust'
+        WHEN 14 THEN 'Tax-Free Savings Account'
+        WHEN 15 THEN 'Retirement Annuity'
+        WHEN 16 THEN 'Life Cover'
+        WHEN 17 THEN 'Home Insurance'
+        WHEN 18 THEN 'Vehicle Insurance'
+        ELSE        'Business Insurance'
+    END                                         AS PRODUCT_NAME,
+ 
+    CASE
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 0  AND 3  THEN 'ACCT'
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 4  AND 7  THEN 'CRED'
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 8  AND 11 THEN 'BUSN'
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 12 AND 15 THEN 'INVS'
+        ELSE                                             'INSR'
+    END                                         AS PRODUCT_CATEGORY,
+ 
+    CASE (fct.PRODUCT_ID % 5)
+        WHEN 0 THEN 'RETL' WHEN 1 THEN 'CORP'
+        WHEN 2 THEN 'PRIV' WHEN 3 THEN 'SMME'
+        ELSE             'INST'
+    END                                         AS PRODUCT_SUB_CATEGORY,
+ 
+    -- Long text column: 5 distinct values but each is 150-200 chars
+    -- Low cardinality but substantial byte width per micro-partition
+    CASE
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 0  AND 3
+            THEN 'OmniFin transactional banking product designed for individual retail clients. Includes electronic fund transfers, debit order management, and point-of-sale functionality regulated under the National Payment System Act.'
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 4  AND 7
+            THEN 'OmniFin credit product subject to National Credit Act affordability assessment and risk-based pricing. Governed by the Credit Risk Policy and reported to the National Credit Regulator on a monthly basis.'
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 8  AND 11
+            THEN 'OmniFin business banking product for registered legal entities. Requires FICA compliance documentation, CIPC registration verification, and annual review under the Commercial Credit Policy framework.'
+        WHEN (fct.PRODUCT_ID % 20) BETWEEN 12 AND 15
+            THEN 'OmniFin investment product regulated under the Collective Investment Schemes Control Act and Financial Advisory and Intermediary Services Act. Subject to SARB prudential investment guidelines and CIS disclosure requirements.'
+        ELSE
+            'OmniFin insurance product underwritten by OmniFin Insurance Limited and distributed under a binder agreement. Regulated by the Financial Sector Conduct Authority under the Insurance Act and Policyholder Protection Rules.'
+    END                                         AS PRODUCT_DESCRIPTION,
+ 
+    TO_NUMBER(TO_CHAR(
+        DATEADD('day', (fct.PRODUCT_ID % 20) * 365, '2010-01-01'::DATE),
+    'YYYYMMDD'))                                AS PRODUCT_LAUNCH_DATE_ID,
+ 
+    CASE (fct.PRODUCT_ID % 3)
+        WHEN 0 THEN 'STND' WHEN 1 THEN 'CAUT' ELSE 'HIGH'
+    END                                         AS PRODUCT_RISK_CLASS,
+ 
+    CASE (fct.PRODUCT_ID % 3)
+        WHEN 0 THEN 'FLAT' WHEN 1 THEN 'TIRE' ELSE 'FREE'
+    END                                         AS PRODUCT_FEE_STRUCTURE,
+ 
+    -- ── 8 DIM_BRANCH columns (inline from BRANCH_ID) ─────────────────────────
+    'OmniFin ' ||
+    CASE (fct.BRANCH_ID % 10)
+        WHEN 0 THEN 'Sandton City'       WHEN 1 THEN 'Rosebank'
+        WHEN 2 THEN 'V&A Waterfront'     WHEN 3 THEN 'Gateway Durban'
+        WHEN 4 THEN 'Menlyn Park'        WHEN 5 THEN 'Eastgate'
+        WHEN 6 THEN 'Canal Walk'         WHEN 7 THEN 'Pavilion'
+        WHEN 8 THEN 'Brooklyn Mall'      ELSE        'Cresta'
+    END || ' Branch'                            AS BRANCH_NAME,
+ 
+    'NED' || LPAD((fct.BRANCH_ID % 9999)::VARCHAR, 4, '0')
+                                                AS BRANCH_CODE,
+ 
+    CASE (fct.BRANCH_ID % 4)
+        WHEN 0 THEN 'FULL' WHEN 1 THEN 'MINI'
+        WHEN 2 THEN 'KIOS' ELSE        'MOBI'
+    END                                         AS BRANCH_TYPE,
+ 
+    CASE (fct.BRANCH_ID % 5)
+        WHEN 0 THEN 'Gauteng'
+        WHEN 1 THEN 'Western Cape'
+        WHEN 2 THEN 'KwaZulu-Natal'
+        WHEN 3 THEN 'Eastern Cape'
+        ELSE        'Other Provinces'
+    END                                         AS BRANCH_REGION,
+ 
+    CASE (fct.BRANCH_ID % 5)
+        WHEN 0 THEN 'Gauteng'
+        WHEN 1 THEN 'Western Cape'
+        WHEN 2 THEN 'KwaZulu-Natal'
+        WHEN 3 THEN 'Eastern Cape'
+        ELSE        'Limpopo'
+    END                                         AS BRANCH_PROVINCE,
+ 
+    CASE (fct.BRANCH_ID % 5)
+        WHEN 0 THEN 'Johannesburg'
+        WHEN 1 THEN 'Cape Town'
+        WHEN 2 THEN 'Durban'
+        WHEN 3 THEN 'Port Elizabeth'
+        ELSE        'Polokwane'
+    END                                         AS BRANCH_CITY,
+ 
+    CASE (fct.BRANCH_ID % 3)
+        WHEN 0 THEN 'URBAN' WHEN 1 THEN 'PERI' ELSE 'RURAL'
+    END                                         AS BRANCH_AREA_CLASSIFICATION,
+ 
+    -- Moderate-cardinality address: street number varies by BRANCH_ID
+    LPAD(((fct.BRANCH_ID % 99) + 1)::VARCHAR, 3, '0') || ' ' ||
+    CASE (fct.BRANCH_ID % 5)
+        WHEN 0 THEN 'Rivonia Road, Sandton, Gauteng, 2196'
+        WHEN 1 THEN 'Buitenkant Street, Cape Town, Western Cape, 8001'
+        WHEN 2 THEN 'Smith Street, Durban, KwaZulu-Natal, 4001'
+        WHEN 3 THEN 'Govan Mbeki Avenue, Port Elizabeth, Eastern Cape, 6001'
+        ELSE        'Landdros Mare Street, Polokwane, Limpopo, 0699'
+    END                                         AS BRANCH_FULL_ADDRESS,
+ 
+    -- ── 5 DIM_CURRENCY columns (inline from CURRENCY_ID) ─────────────────────
+    CASE (fct.CURRENCY_ID % 3)
+        WHEN 0 THEN 'South African Rand'
+        WHEN 1 THEN 'United States Dollar'
+        ELSE        'Euro'
+    END                                         AS CURRENCY_NAME,
+ 
+    CASE (fct.CURRENCY_ID % 3)
+        WHEN 0 THEN 'ZAR' WHEN 1 THEN 'USD' ELSE 'EUR'
+    END                                         AS CURRENCY_SYMBOL,
+ 
+    CASE (fct.CURRENCY_ID % 3)
+        WHEN 0 THEN 'AFRC' ELSE 'INTL'
+    END                                         AS CURRENCY_REGION,
+ 
+    'FIAT'                                      AS CURRENCY_TYPE,
+ 
+    2                                           AS CURRENCY_DECIMAL_PLACES,
+ 
+    -- ── 6 DIM_DATE columns (inline from DATE_ID) ─────────────────────────────
+    YEAR(TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD'))
+                                                AS TRANSACTION_YEAR,
+    MONTH(TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD'))
+                                                AS TRANSACTION_MONTH,
+    QUARTER(TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD'))
+                                                AS TRANSACTION_QUARTER,
+    DECODE(DAYOFWEEK(TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD')),
+        0,'SUN', 1,'MON', 2,'TUE', 3,'WED', 4,'THU', 5,'FRI', 'SAT')
+                                                AS TRANSACTION_DAY_OF_WEEK,
+    CASE WHEN DAYOFWEEK(TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD')) IN (0,6)
+         THEN 1 ELSE 0
+    END                                         AS TRANSACTION_IS_WEEKEND_FLAG,
+    CASE WHEN LAST_DAY(TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD'))
+              = TO_DATE(fct.DATE_ID::VARCHAR, 'YYYYMMDD')
+         THEN 1 ELSE 0
+    END                                         AS TRANSACTION_IS_MONTH_END_FLAG,
+ 
+    -- ── 3 DIM_TRANSACTION_TYPE columns (inline from TRANSACTION_TYPE_CD) ─────
+    CASE fct.TRANSACTION_TYPE
+        WHEN 'TRF' THEN 'Interbank or intrabank electronic fund transfer'
+        WHEN 'PMT' THEN 'Scheduled or once-off beneficiary payment'
+        WHEN 'ATM' THEN 'Cash withdrawal or deposit at ATM terminal'
+        WHEN 'POS' THEN 'Card-present purchase at merchant point-of-sale'
+        ELSE             'Bank-initiated service charge or fee debit'
+    END                                         AS TRANSACTION_TYPE_DESCRIPTION,
+ 
+    CASE fct.TRANSACTION_TYPE
+        WHEN 'FEE' THEN 0 ELSE 1
+    END                                         AS TRANSACTION_TYPE_IS_DEBIT_FLAG,
+ 
+    CASE fct.TRANSACTION_TYPE
+        WHEN 'TRF' THEN 1 WHEN 'PMT' THEN 1 ELSE 0
+    END                                         AS TRANSACTION_TYPE_REQUIRES_APPROVAL_FLAG,
+ 
+    -- ── 3 DIM_STATUS columns (inline from TRANSACTION_STATUS_CD) ─────────────
+    CASE fct.TRANSACTION_STATUS
+        WHEN 'AP' THEN 'Approved and settled — final state'
+        WHEN 'PE' THEN 'Pending clearing — awaiting interbank settlement'
+        WHEN 'RE' THEN 'Reversed — previously approved, rolled back'
+        ELSE             'Cancelled — voided before settlement'
+    END                                         AS STATUS_DESCRIPTION,
+ 
+    CASE fct.TRANSACTION_STATUS
+        WHEN 'AP' THEN 1 WHEN 'RE' THEN 1 WHEN 'CA' THEN 1 ELSE 0
+    END                                         AS STATUS_IS_FINAL_FLAG,
+ 
+    CASE fct.TRANSACTION_STATUS
+        WHEN 'PE' THEN 1 WHEN 'RE' THEN 1 ELSE 0
+    END                                         AS STATUS_REQUIRES_ACTION_FLAG
+FROM FACT_TRANSACTION_CLUSTERED fct
+JOIN DIM_CUSTOMER dc on fct.customer_id = dc.customer_id
+ORDER BY fct.date_id, fct.transaction_type;
