@@ -13,7 +13,8 @@ CLUSTER BY customer_id;
 
 WITH reference_date AS (
   SELECT DATE '2024-01-31' AS as_of_date
-)
+),
+latest_snapshot AS (
 SELECT
   bf.customer_id,
   bf.snapshot_date                                    AS feature_snapshot_date,
@@ -26,7 +27,7 @@ WHERE bf.snapshot_date <= r.as_of_date
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY bf.customer_id
   ORDER BY bf.snapshot_date DESC
-) = 1
+) = 1)
 SELECT
 	ls.customer_id,
 	ls.feature_snapshot_date,
