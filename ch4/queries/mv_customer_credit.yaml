@@ -1,0 +1,22 @@
+CREATE OR REPLACE VIEW omnifin.business_vault.mv_customer_credit
+WITH METRICS
+LANGUAGE YAML
+AS $$
+version: 1.1
+comment: "Customer credit KPIs, defined once for every domain"
+source: omnifin.business_vault.customer_credit_daily
+dimensions:
+  - name: snapshot_date
+    expr: snapshot_date
+  - name: customer_segment
+    expr: customer_segment
+  - name: regulatory_risk_rating
+    expr: regulatory_risk_rating
+measures:
+  - name: total_exposure
+    expr: SUM(outstanding_balance)
+  - name: total_credit_limit
+    expr: SUM(credit_limit)
+  - name: credit_utilization
+    expr: MEASURE(total_exposure) / NULLIF(MEASURE(total_credit_limit), 0)
+$$;
